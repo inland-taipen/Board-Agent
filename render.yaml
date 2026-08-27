@@ -1,15 +1,34 @@
-# Render Blueprint for BoardLens.
+# Render Blueprint for BoardLens — FREE TIER.
 #
-# Render reads this from the repository root and provisions everything in one
-# step. Nothing here contains a secret: every sensitive value is marked
-# `sync: false`, which makes Render prompt for it in the dashboard instead of
-# reading it from version control.
+# Nothing here contains a secret: every sensitive value is marked `sync: false`,
+# which makes Render prompt for it in the dashboard rather than reading it from
+# version control.
 #
-# A paid instance is required, and not for CPU. Render's free tier has an
-# ephemeral filesystem and no disks, so the SQLite database, the encrypted
-# board packs and the retrieval indexes would be destroyed on every restart and
-# every 15-minute idle spin-down. The `disk:` block below is the whole reason
-# this needs the Starter plan.
+# ---------------------------------------------------------------------------
+# WHAT THE FREE TIER MEANS HERE — read this before showing it to anyone.
+#
+# Free web services have an ephemeral filesystem and cannot attach a disk, and
+# they sleep after 15 minutes without traffic. When the service wakes, the
+# database, user accounts, uploaded board packs, retrieval indexes and generated
+# briefings are all gone.
+#
+# In practice:
+#   WORKS  - a live session. The service stays warm while it is being used, so
+#            sign in, upload, generate, review and export all behave normally.
+#   WORKS  - signing in after a sleep. The bootstrap administrator below is
+#            recreated on every cold start, so the login always exists.
+#   FAILS  - coming back later. Anything uploaded in a previous session is gone,
+#            as is anyone added through the People screen.
+#   FAILS  - a briefing running when the service sleeps. Generation is in-process
+#            and takes ~90 seconds; it survives only while traffic keeps the
+#            service awake, which an active user does.
+#
+# TO MAKE IT PERMANENT, three changes (~$9.50/month):
+#   1. plan: starter
+#   2. uncomment the `disk:` block
+#   3. redeploy
+# Data then survives restarts. See deploy/RENDER.md.
+# ---------------------------------------------------------------------------
 
 services:
   - type: web
@@ -18,32 +37,33 @@ services:
     dockerfilePath: ./Dockerfile
     dockerContext: .
 
-    # Singapore is the closest Render region to India. Board packs are latency
-    # -insensitive, but keeping the data nearer its owners is the better default.
+    # Closest Render region to India.
     region: singapore
 
     # Measured: 87 MB idle, 95 MB while parsing and encrypting a four-document
-    # pack. Starter (512 MB) has ample headroom for testing. Move to `standard`
-    # if 500-page packs start being rejected for memory.
-    plan: starter
+    # pack — comfortably inside free tier's 512 MB. Memory is not the
+    # constraint on the free plan; storage is.
+    plan: free
 
     healthCheckPath: /health
 
-    # Survives restarts, redeploys and instance moves. Without it, BoardLens
-    # loses every account and every uploaded pack on the first restart.
-    disk:
-      name: boardlens-data
-      mountPath: /data
-      sizeGB: 10
+    # Persistent storage. Requires a paid instance - uncommenting this on the
+    # free plan makes the deploy fail rather than silently ignoring it.
+    # disk:
+    #   name: boardlens-data
+    #   mountPath: /data
+    #   sizeGB: 10
 
     envVars:
-      # --- set once, in the dashboard, never committed --------------------
-      # Rotate the provider key if it has ever been pasted anywhere shared.
+      # --- entered once in the dashboard, never committed ------------------
       - key: GEMINI_API_KEY
         sync: false
 
       # python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-      # Changing this later makes every already-uploaded pack undecryptable.
+      # On the free tier this only protects packs within a single session,
+      # since the filesystem does not survive a sleep. It still matters: set a
+      # real one, and on a paid plan never change it - doing so makes every
+      # already-uploaded pack permanently undecryptable.
       - key: BOARDLENS_ENCRYPTION_KEY
         sync: false
 
@@ -51,27 +71,27 @@ services:
       - key: BOARDLENS_JWT_SECRET
         sync: false
 
-      # The first administrator, created once on first boot.
+      # Recreated on every cold start, so these are the credentials that always
+      # work. Anyone added through the People screen is lost when the service
+      # sleeps - on the free tier, share these rather than creating accounts.
       - key: BOARDLENS_BOOTSTRAP_EMAIL
         sync: false
       - key: BOARDLENS_BOOTSTRAP_PASSWORD
         sync: false
 
-      # --- safe to keep in version control --------------------------------
-      # Pinned rather than left on auto: with auto-detection, adding an
-      # unrelated key to the environment would silently change which model
-      # writes the board's briefing.
+      # --- safe in version control -----------------------------------------
+      # Pinned rather than auto-detected: with auto, adding an unrelated key to
+      # the environment would silently change which model writes the briefing.
       - key: BOARDLENS_PROVIDER
         value: gemini
       - key: BOARDLENS_GEMINI_MODEL
         value: gemini-3.7-flash
 
-      # Absolute, and matching the disk mountPath above.
+      # The Dockerfile creates and owns /data, so this works with or without a
+      # disk attached. Without one it is simply ephemeral.
       - key: BOARDLENS_DATA_DIR
         value: /data
 
-      # Set by the Dockerfile too, but stated here so it is visible in the
-      # dashboard alongside everything else.
       - key: BOARDLENS_WEB_DIR
         value: /app/frontend/dist
 

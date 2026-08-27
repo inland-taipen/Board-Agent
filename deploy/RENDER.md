@@ -1,33 +1,42 @@
 # Deploying BoardLens on Render
 
-The fastest route to a permanent, always-on `https://` link. About 15 minutes,
-most of it waiting for the first build. No server administration, no SSH, no
-certificate setup — Render handles TLS automatically.
+The fastest route to a public `https://` link. About 15 minutes, most of it
+waiting for the first build. No server administration, no SSH, no certificate
+setup — Render handles TLS automatically.
 
-## What it costs, and why it cannot be free
+## What you get on the free tier
 
-**$7/month** (Starter instance) **+ $2.50/month** (10 GB disk) = **~$9.50/month**.
+**Free. No credit card.** `render.yaml` is configured for the free plan.
 
-Render's free tier will not work, and it is worth understanding why rather than
-discovering it after an afternoon of setup. Free web services have an
-**ephemeral filesystem** and cannot attach a disk. Render's own documentation is
-explicit that *"local SQLite databases are lost every time the service
-redeploys, restarts, or spins down"* — and free services spin down after 15
-minutes of inactivity.
+Free web services have an **ephemeral filesystem** — no disk can be attached —
+and they **sleep after 15 minutes without traffic**. When the service wakes, the
+database, user accounts, uploaded packs, retrieval indexes and generated
+briefings are gone.
 
-For BoardLens that means every quarter-hour of quiet destroys the database, the
-user accounts you created, the uploaded board packs and the retrieval indexes. A
-reviewer who signs in tomorrow finds their account gone.
+Tested against the real image, this is what that actually means:
 
-The `disk:` in `render.yaml` is the entire reason a paid instance is needed. It
-is not about CPU or memory: BoardLens idles at 87 MB and peaks around 95 MB
-while parsing a pack, which is a fraction of Starter's 512 MB.
+| | |
+|---|---|
+| ✅ A live session | The service stays warm while in use. Sign in, upload, generate, review, export — all normal |
+| ✅ Signing in after a sleep | The bootstrap administrator is recreated on every cold start, so the login always works |
+| ⚠️ First click after a sleep | ~1 minute cold start; Render shows a loading page |
+| ❌ Returning later | Anything uploaded in an earlier session is gone |
+| ❌ People you add | Accounts created in the People screen vanish on sleep — share the bootstrap login instead |
 
-> If free is a hard constraint, use **GitHub Codespaces** instead — genuinely
-> free, no card, persistent disk, but it stops after 30 minutes idle so the link
-> only works while you have it running. See the main `README.md`.
+**So it works for a live demo, not for a link people dip into over a week.**
 
----
+Memory is not the constraint: BoardLens idles at 87 MB and peaks around 95 MB
+parsing a pack, against free tier's 512 MB. Only storage is.
+
+### Making it permanent later
+
+Three changes, about **$9.50/month** ($7 Starter + $2.50 for 10 GB):
+
+1. `plan: starter` in `render.yaml`
+2. Uncomment the `disk:` block
+3. Push — Render redeploys
+
+Data then survives restarts, and accounts you create in People persist.
 
 ## Before you start
 
@@ -35,16 +44,18 @@ while parsing a pack, which is a fraction of Starter's 512 MB.
 - A Google Gemini API key — [aistudio.google.com/apikey](https://aistudio.google.com/apikey)
 - A Render account — [render.com](https://render.com/) (sign in with GitHub)
 
-**Generate the two secrets now**, on your laptop, and keep them somewhere safe:
+**Generate the two secrets now**, on your laptop, and keep them somewhere safe.
+You will paste them into Render's dashboard, not into the repository:
 
 ```bash
 python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"   # BOARDLENS_ENCRYPTION_KEY
 python3 -c "import secrets; print(secrets.token_urlsafe(48))"                                # BOARDLENS_JWT_SECRET
 ```
 
-Keep `BOARDLENS_ENCRYPTION_KEY` somewhere separate and durable. It encrypts
-every uploaded pack; if you lose it, existing packs become permanently
-unreadable, and changing it has the same effect.
+Keep `BOARDLENS_ENCRYPTION_KEY` somewhere durable. On the free tier it only
+protects packs within a single session, since nothing survives a sleep — but
+once you move to a paid plan, losing or changing it makes every already-uploaded
+pack permanently unreadable.
 
 ---
 
@@ -65,7 +76,7 @@ unreadable, and changing it has the same effect.
 
 5. **Apply**
 
-Everything else — region, plan, the disk, the provider settings — comes from
+Everything else — region, plan and the provider settings — comes from
 `render.yaml`, so there is nothing else to configure.
 
 ## 2 · Wait for the first build (~8 min)
@@ -93,8 +104,13 @@ Sign in with the bootstrap email and password from step 1.
 
 ## 4 · Set it up for your reviewers (~5 min)
 
+> **On the free tier, skip the People screen.** Accounts created there are lost
+> on the next sleep. Share the bootstrap email and password from step 1 with your
+> reviewers instead — it is recreated on every cold start, so it always works.
+> Per-person logins become worthwhile once you move to a paid plan.
+
 1. **Add board** — the company name. It appears on every exported briefing.
-2. **People → Add someone**, one entry per reviewer:
+2. **People → Add someone**, one entry per reviewer (paid plans):
    - **Director** — reads briefings only. Correct for most people you are showing it to.
    - **Company secretary** — uploads packs and generates briefings.
    - **Administrator** — also manages people.
@@ -106,7 +122,8 @@ Send each reviewer three things: the URL, their email, and their password.
 ### Give them something to look at first
 
 A reviewer landing on an empty screen has nothing to react to. Upload a pack and
-generate a briefing **before** you send the link. To make a synthetic pack
+generate a briefing **before** you send the link — and on the free tier, do it
+shortly before, since a sleep wipes it. To make a synthetic pack
 locally:
 
 ```bash
@@ -133,9 +150,13 @@ Render redeploys automatically on every push to `main`:
 git push
 ```
 
-Your disk and environment variables are untouched by a deploy. Data survives.
+Environment variables are untouched by a deploy. On a paid plan the disk is too,
+so data survives; on the free tier a deploy wipes it like any other restart.
 
 ## Backups
+
+Not applicable on the free tier — there is nothing persistent to back up. On a
+paid plan:
 
 There is no automatic backup. Render's **Disks → Snapshots** covers the volume
 on paid plans; take one before anything significant. To pull a copy down, use
@@ -156,11 +177,12 @@ is encrypted with it and is unreadable without it.
 |---|---|---|
 | Build fails on the frontend step | Node ran out of memory | Rare on Render's builders; retry, then raise the plan if it repeats |
 | `provider=none` in the logs | Gemini key missing or a placeholder | **Environment** tab → check `GEMINI_API_KEY` → **Save**, which redeploys |
-| Sign-in rejected | Bootstrap account is created **only on first boot** | Changing `BOARDLENS_BOOTSTRAP_PASSWORD` afterwards has no effect. Use the Shell to reset, or wipe the disk and redeploy |
+| Sign-in rejected | Bootstrap account is created on first boot of an empty database | On the free tier just change the value and redeploy — the database is empty each time, so it takes effect. On a paid plan the account already exists, so use the Shell or wipe the disk |
 | "No model provider credentials" on a pack | Same as above | Same |
 | Briefing fails partway | Gemini free-tier rate limit | The error is shown on the meeting. Wait a few minutes, press Generate again |
 | Upload rejected as too large | Above the configured limit | Raise `BOARDLENS_MAX_UPLOAD_MB` in the Environment tab |
-| Everything vanished after a restart | The service has no disk attached | Confirm **Disks** shows `boardlens-data` mounted at `/data`. Without it you are effectively on ephemeral storage |
+| Everything vanished after a restart | Expected on the free tier | This is the ephemeral filesystem, not a fault. Move to Starter with a disk to fix it |
+| First load takes ~1 minute | Free tier cold start after a sleep | Expected. Open the link yourself a minute before sending it to anyone |
 
 ---
 
