@@ -1,0 +1,63 @@
+# BoardLens - production compose for a single always-on host.
+#
+# Two containers: the app, and Caddy in front of it for automatic HTTPS.
+# Caddy is here because browsers warn on password fields served over plain HTTP,
+# and a security warning is the wrong first impression for a governance product.
+# It obtains and renews a Let's Encrypt certificate on its own; there is nothing
+# to configure beyond the hostname in .env.
+#
+# Usage on the server:
+#   cp .env.prod.example .env && nano .env      # fill in the four values
+#   docker compose -f docker-compose.prod.yml up -d
+
+services:
+  boardlens:
+    image: boardlens:0.1.0
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    # No published ports: only Caddy may reach it, so the app is never exposed
+    # on plain HTTP even by accident.
+    expose:
+      - "8000"
+    environment:
+      BOARDLENS_PROVIDER: ${BOARDLENS_PROVIDER:-gemini}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      BOARDLENS_GEMINI_MODEL: ${BOARDLENS_GEMINI_MODEL:-gemini-3.7-flash}
+
+      # Absolute, so it cannot depend on the working directory.
+      BOARDLENS_DATA_DIR: /data
+
+      BOARDLENS_ENCRYPTION_KEY: ${BOARDLENS_ENCRYPTION_KEY:?generate one - see .env.prod.example}
+      BOARDLENS_JWT_SECRET: ${BOARDLENS_JWT_SECRET:?generate one - see .env.prod.example}
+      BOARDLENS_BOOTSTRAP_EMAIL: ${BOARDLENS_BOOTSTRAP_EMAIL:?set an admin email}
+      BOARDLENS_BOOTSTRAP_PASSWORD: ${BOARDLENS_BOOTSTRAP_PASSWORD:?set an admin password}
+      BOARDLENS_MAX_UPLOAD_MB: ${BOARDLENS_MAX_UPLOAD_MB:-200}
+    volumes:
+      - boardlens-data:/data
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      BOARDLENS_HOSTNAME: ${BOARDLENS_HOSTNAME:?set the domain this will be served on}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - boardlens
+    restart: unless-stopped
+
+volumes:
+  boardlens-data:
+    driver: local
+  caddy-data:
+    driver: local
+  caddy-config:
+    driver: local

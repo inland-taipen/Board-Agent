@@ -1,0 +1,33 @@
+# Local and pilot deployment.
+#
+# There is no database or object-store service here by design: BoardLens keeps
+# its metadata in SQLite and its board packs in an encrypted blob store on a
+# single volume. That is what makes a client-hosted install a matter of running
+# one container with one mount, rather than provisioning infrastructure.
+
+services:
+  boardlens:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: boardlens:0.1.0
+    ports:
+      - "127.0.0.1:8000:8000"   # bound to loopback; terminate TLS in front of it
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:?set ANTHROPIC_API_KEY in .env}
+      BOARDLENS_MODEL: ${BOARDLENS_MODEL:-claude-opus-5}
+      BOARDLENS_EFFORT: ${BOARDLENS_EFFORT:-high}
+      BOARDLENS_DATA_DIR: /data
+      BOARDLENS_ENCRYPTION_KEY: ${BOARDLENS_ENCRYPTION_KEY:-}
+      BOARDLENS_JWT_SECRET: ${BOARDLENS_JWT_SECRET:?set BOARDLENS_JWT_SECRET in .env}
+      BOARDLENS_BOOTSTRAP_EMAIL: ${BOARDLENS_BOOTSTRAP_EMAIL:-admin@stairdigital.example}
+      BOARDLENS_BOOTSTRAP_PASSWORD: ${BOARDLENS_BOOTSTRAP_PASSWORD:?set BOARDLENS_BOOTSTRAP_PASSWORD in .env}
+      BOARDLENS_DENSE_RETRIEVAL: ${BOARDLENS_DENSE_RETRIEVAL:-false}
+      BOARDLENS_MAX_UPLOAD_MB: ${BOARDLENS_MAX_UPLOAD_MB:-200}
+    volumes:
+      - boardlens-data:/data
+    restart: unless-stopped
+
+volumes:
+  boardlens-data:
+    driver: local

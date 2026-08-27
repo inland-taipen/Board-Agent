@@ -1,0 +1,39 @@
+# --- secrets -------------------------------------------------------------
+# .env holds live provider API keys. Never commit it; .env.example is the
+# template that goes in the repository instead.
+.env
+.env.*
+!.env.example
+!deploy/.env.prod.example
+*.key
+*.pem
+
+# --- board pack material -------------------------------------------------
+# Uploaded packs, their encrypted blobs, the encryption key, retrieval indexes
+# and generated briefings. This is client content and must never leave the
+# machine it was uploaded to.
+storage/
+out/
+exports/
+*.enc
+sample_pack/
+
+# --- build artefacts and caches -----------------------------------------
+.venv/
+venv/
+node_modules/
+dist/
+build/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+tsconfig.tsbuildinfo
+.mypy_cache/
+
+# --- editor / OS ---------------------------------------------------------
+.DS_Store
+.idea/
+.vscode/
+*.swp

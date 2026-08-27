@@ -1,0 +1,36 @@
+# Caddy obtains and renews the TLS certificate automatically. The only thing
+# that has to be right is that BOARDLENS_HOSTNAME resolves to this server's
+# public IP before the first start - Let's Encrypt verifies over port 80.
+
+{$BOARDLENS_HOSTNAME} {
+	encode zstd gzip
+
+	# Board packs are large; the default 10MB body limit would reject them.
+	request_body {
+		max_size 210MB
+	}
+
+	reverse_proxy boardlens:8000 {
+		# A briefing run holds the request open only long enough to be queued,
+		# but uploads of a 200MB pack can be slow on a poor connection.
+		transport http {
+			read_timeout 600s
+			write_timeout 600s
+		}
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+		-Server
+	}
+
+	log {
+		output file /data/access.log {
+			roll_size 10MB
+			roll_keep 5
+		}
+	}
+}
