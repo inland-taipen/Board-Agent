@@ -164,7 +164,8 @@ briefing's coverage note. They are never silently dropped.
 - [`docs/architecture.md`](docs/architecture.md) — how the pipeline works and why
 - [`docs/security.md`](docs/security.md) — the security posture, and its limits
 - [`docs/briefing-template.md`](docs/briefing-template.md) — the briefing structure (BRD Phase 1)
-- [`deploy/README.md`](deploy/README.md) — putting it on a shareable HTTPS link, free
+- [`deploy/RENDER.md`](deploy/RENDER.md) — deploy on Render (~$9.50/mo, 15 min, no server admin)
+- [`deploy/README.md`](deploy/README.md) — deploy on an Oracle Always Free VM (free, ~40 min)
 
 ## Development
 

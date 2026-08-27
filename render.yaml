@@ -1,0 +1,79 @@
+# Render Blueprint for BoardLens.
+#
+# Render reads this from the repository root and provisions everything in one
+# step. Nothing here contains a secret: every sensitive value is marked
+# `sync: false`, which makes Render prompt for it in the dashboard instead of
+# reading it from version control.
+#
+# A paid instance is required, and not for CPU. Render's free tier has an
+# ephemeral filesystem and no disks, so the SQLite database, the encrypted
+# board packs and the retrieval indexes would be destroyed on every restart and
+# every 15-minute idle spin-down. The `disk:` block below is the whole reason
+# this needs the Starter plan.
+
+services:
+  - type: web
+    name: boardlens
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+
+    # Singapore is the closest Render region to India. Board packs are latency
+    # -insensitive, but keeping the data nearer its owners is the better default.
+    region: singapore
+
+    # Measured: 87 MB idle, 95 MB while parsing and encrypting a four-document
+    # pack. Starter (512 MB) has ample headroom for testing. Move to `standard`
+    # if 500-page packs start being rejected for memory.
+    plan: starter
+
+    healthCheckPath: /health
+
+    # Survives restarts, redeploys and instance moves. Without it, BoardLens
+    # loses every account and every uploaded pack on the first restart.
+    disk:
+      name: boardlens-data
+      mountPath: /data
+      sizeGB: 10
+
+    envVars:
+      # --- set once, in the dashboard, never committed --------------------
+      # Rotate the provider key if it has ever been pasted anywhere shared.
+      - key: GEMINI_API_KEY
+        sync: false
+
+      # python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+      # Changing this later makes every already-uploaded pack undecryptable.
+      - key: BOARDLENS_ENCRYPTION_KEY
+        sync: false
+
+      # python3 -c "import secrets; print(secrets.token_urlsafe(48))"
+      - key: BOARDLENS_JWT_SECRET
+        sync: false
+
+      # The first administrator, created once on first boot.
+      - key: BOARDLENS_BOOTSTRAP_EMAIL
+        sync: false
+      - key: BOARDLENS_BOOTSTRAP_PASSWORD
+        sync: false
+
+      # --- safe to keep in version control --------------------------------
+      # Pinned rather than left on auto: with auto-detection, adding an
+      # unrelated key to the environment would silently change which model
+      # writes the board's briefing.
+      - key: BOARDLENS_PROVIDER
+        value: gemini
+      - key: BOARDLENS_GEMINI_MODEL
+        value: gemini-3.7-flash
+
+      # Absolute, and matching the disk mountPath above.
+      - key: BOARDLENS_DATA_DIR
+        value: /data
+
+      # Set by the Dockerfile too, but stated here so it is visible in the
+      # dashboard alongside everything else.
+      - key: BOARDLENS_WEB_DIR
+        value: /app/frontend/dist
+
+      - key: BOARDLENS_MAX_UPLOAD_MB
+        value: "200"
