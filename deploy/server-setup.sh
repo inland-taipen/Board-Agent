@@ -4,7 +4,7 @@
 # Run once, on the server, before the first deploy. Safe to run again - every
 # step checks whether it has already been done.
 #
-#   bash server-setup.sh
+#   bash server-setup.sh [git-repo-url]
 #
 # Handles the three things that catch people out on Oracle specifically:
 #   1. Docker is not installed on their Ubuntu images.
@@ -14,10 +14,13 @@
 #      build the frontend - node runs out of memory. Swap fixes it.
 set -euo pipefail
 
+REPO="${1:-https://github.com/inland-taipen/Board-Agent.git}"
+TARGET="$HOME/BoardAgent"
+
 green() { printf '\033[32m%s\033[0m\n' "$1"; }
 info()  { printf '\033[36m==> %s\033[0m\n' "$1"; }
 
-info "1/4  Docker"
+info "1/5  Docker"
 if command -v docker >/dev/null 2>&1; then
     green "     already installed ($(docker --version))"
 else
@@ -27,7 +30,7 @@ else
     NEED_RELOGIN=1
 fi
 
-info "2/4  Firewall (ports 80 and 443)"
+info "2/5  Firewall (ports 80 and 443)"
 # Oracle's Ubuntu image has a REJECT rule near the end of the INPUT chain, so
 # new rules must be inserted above it rather than appended.
 for port in 80 443; do
@@ -45,7 +48,7 @@ fi
 sudo netfilter-persistent save >/dev/null
 green "     rules saved (they survive reboot)"
 
-info "3/4  Swap"
+info "3/5  Swap"
 TOTAL_MB=$(free -m | awk '/^Mem:/{print $2}')
 SWAP_MB=$(free -m | awk '/^Swap:/{print $2}')
 if [ "$SWAP_MB" -gt 0 ]; then
@@ -62,17 +65,19 @@ else
     green "     not needed (${TOTAL_MB}MB RAM)"
 fi
 
-info "4/4  Unpack the application"
-if [ -f ~/boardlens-deploy.tar.gz ]; then
-    mkdir -p ~/BoardAgent
-    tar xzf ~/boardlens-deploy.tar.gz -C ~/BoardAgent
-    green "     unpacked to ~/BoardAgent"
+info "4/5  Git"
+command -v git >/dev/null 2>&1 || sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git
+green "     $(git --version)"
+
+info "5/5  Application source"
+if [ -d "$TARGET/.git" ]; then
+    git -C "$TARGET" pull --ff-only
+    green "     updated $TARGET"
 else
-    echo "     ~/boardlens-deploy.tar.gz not found."
-    echo "     Copy it up first, from your laptop:"
-    echo "       bash deploy/package.sh"
-    echo "       scp -i <key> /tmp/boardlens-deploy.tar.gz ubuntu@<SERVER_IP>:~/"
-    exit 1
+    # A private repository will prompt for credentials here. Use a personal
+    # access token as the password, or make the repository public.
+    git clone --depth 1 "$REPO" "$TARGET"
+    green "     cloned to $TARGET"
 fi
 
 echo

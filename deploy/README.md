@@ -58,37 +58,33 @@ Certificates fail if DNS has not propagated.
 
 ---
 
-## 3. Copy the code up and start it (~15 min)
+## 3. Install and start (~15 min)
 
-**On your laptop**, package the source and send it over. The project is not in
-git, and at 150 KB a tarball is simpler than setting one up. Secrets, uploaded
-packs and exports are excluded automatically.
-
-```bash
-cd ~/BoardAgent
-bash deploy/package.sh
-scp -i ~/Downloads/ssh-key-*.key /tmp/boardlens-deploy.tar.gz ubuntu@YOUR_SERVER_IP:~/
-```
-
-**Then log in to the server:**
+Log in to the server:
 
 ```bash
 chmod 600 ~/Downloads/ssh-key-*.key
 ssh -i ~/Downloads/ssh-key-*.key ubuntu@YOUR_SERVER_IP
 ```
 
-**Run the setup script.** It installs Docker, opens the firewall, adds swap if
-the instance is small, and unpacks the code:
+Fetch the setup script and run it. It installs Docker and git, opens the local
+firewall, adds swap if the instance is small, and clones the repository:
 
 ```bash
-tar xzf boardlens-deploy.tar.gz -O deploy/server-setup.sh > setup.sh
+curl -fsSL https://raw.githubusercontent.com/inland-taipen/Board-Agent/main/deploy/server-setup.sh -o setup.sh
 bash setup.sh
 ```
+
+> **If the repository is private**, `curl` cannot fetch the script and the clone
+> will prompt for credentials. Either make it public for the duration of the
+> test, or create a [personal access token](https://github.com/settings/tokens)
+> with `repo` scope and use it as the password when git asks. A third option is
+> to clone over SSH with a deploy key.
 
 If it says to log out and back in, do that — your user needs to pick up the
 `docker` group — then continue.
 
-**Configure and start:**
+Configure and start:
 
 ```bash
 cd ~/BoardAgent/deploy
@@ -110,7 +106,7 @@ bash start.sh
 ```
 
 It checks your settings and DNS before building, so a missing value fails in
-two seconds rather than after a five-minute build. The first build takes 3–6
+two seconds rather than after a five-minute build. The first build takes 3-6
 minutes. When it finishes it prints your URL.
 
 Open `https://your-hostname`. The certificate is issued on the first request,
@@ -156,20 +152,14 @@ docker compose -f docker-compose.prod.yml restart    # restart
 docker compose -f docker-compose.prod.yml down       # stop (data is kept)
 ```
 
-**Update after changing the code on your laptop:**
+**Update to the latest code:**
 
 ```bash
-# on your laptop
-bash deploy/package.sh
-scp -i <key> /tmp/boardlens-deploy.tar.gz ubuntu@YOUR_SERVER_IP:~/
-
-# on the server
-tar xzf ~/boardlens-deploy.tar.gz -C ~/BoardAgent
-cd ~/BoardAgent/deploy && bash start.sh
+cd ~/BoardAgent && git pull && cd deploy && bash start.sh
 ```
 
-Your `.env` and all uploaded data are untouched by this — the archive excludes
-both, and the data lives in a Docker volume rather than the source tree.
+Your `.env` and all uploaded data are untouched — `.env` is gitignored, and the
+data lives in a Docker volume rather than the source tree.
 
 **Back up everything** — database, uploaded packs, indexes:
 
